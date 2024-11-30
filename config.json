@@ -1,8 +1,10 @@
 {
     "trading": {
+        "exchange": "binance",
         "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"],
         "timeframe": "1d",
-        "position_size": 0.01,
+        "period": 100,
+        "position_size": 0.01
     },
 
     "strategy": {
@@ -15,5 +17,15 @@
 
     "risk_management": {
         "stop_loss_pct": 0.05, 
+        "take_profit_pct": 0.10,
+        "max_drawdown_pct": 0.10,
+        "max_cap_allocation_pct": 1
+    },
+    
+    "logging": {
+        "level": "INFO",
+        "file_path": "trading.log",
+        "console_output": true
     }
+ 
 }
