@@ -1,19 +1,34 @@
 {
     "trading": {
+        "exchange": "binance",
         "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"],
         "timeframe": "1d",
-        "position_size": 0.01,
+        "period": 100
     },
 
     "strategy": {
         "rsi_period": 14,
         "rsi_overbought": 70,
         "rsi_oversold": 30,
+        "rsi_exitsell": 50,
+        "rsi_exitlong": 50,
         "bollinger_period": 20,
-        "bollinger_std_dev": 2
+        "bollinger_std_dev": 2,
+        "atr_period": 14
     },
 
     "risk_management": {
+        "portfolio_risk": 0.01,
         "stop_loss_pct": 0.05, 
+        "take_profit_pct": 0.10,
+        "max_drawdown_pct": 0.10,
+        "max_cap_allocation_pct": 1
+    },
+    
+    "logging": {
+        "level": "INFO",
+        "file_path": "trading.log",
+        "console_output": true
     }
+ 
 }
