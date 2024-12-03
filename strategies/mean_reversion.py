@@ -2,6 +2,8 @@ import pandas as pd
 from dataclasses import dataclass
 from datetime import datetime
 from .indicators import rsi, bb, atr, std_dev
+from utilities.api_client import APIClient
+import os
 
 @dataclass
 # Should i make it a trade that has closed? idk
@@ -9,8 +11,8 @@ class Trade:
     id: int
     pair: str
     time: datetime
-    size: float
-    price: float
+    size: float #amnt of BTC
+    price: float #BTC/AUD trade price
     fees: float
     side: str  # 'long' or 'short'
 
@@ -18,12 +20,13 @@ class Trade:
 # Use OHLCV dataframe from ccxt as data input and JSON config file as input in live build
 # Figure out position sizing later
 class MeanReversionStrat:
-    def __init__(self, config, balance, pos = 0, pos_size = 0, trades = []):
+    def __init__(self, config, api_key, api_secret, pos = 0, pos_size = 0, trades: list[Trade] = []): 
         self.config = config
-        self.balance = balance
+        self.balance = self.client.exchange.fetch_balance()['AUD']['free']
         self.pos = pos
         self.pos_size = pos_size
         self.trades = trades
+        self.client = APIClient(config, api_key, api_secret)
 
     # For both entry and exit signals, could combine into seperate functions in future
     def gen_signal(self, data):
@@ -47,7 +50,7 @@ class MeanReversionStrat:
             # Sell signal
             elif enter_short:
                 return -1
-        # TODO: change from 2nd bb to middle bb
+
         elif self.pos != 0: #Check for exit signal
             long_sl_hit = cur_price >= self.trades[-1].price + self.sl_dist(signal=1, data=data)
             exit_long = (cur_price <= sma or rsi >= rsi_exitlong or long_sl_hit)
@@ -89,35 +92,57 @@ class MeanReversionStrat:
         return dist
 
 
-    
+    # TODO: include fees, and also price probably isn't correct with last close price (gotta cross bid-ask spread)
     def enter_position(self, signal, data):
-        if signal == 1:
-            self.pos = 1
-            #figure this out later lol
-            self.pos_size = self.config['risk_management']['portfolio_risk']*self.balance/self.sl_dist(signal, data)
+        self.pos = signal
+        self.pos_size = self.pos_size = self.config['risk_management']['portfolio_risk']*self.balance/self.sl_dist(signal, data)
+        self.execute_trade(signal, data)
 
-        elif signal == -1:
-            self.pos = -1
-            self.pos_size = self.config['risk_management']['portfolio_risk']*self.balance/self.sl_dist(signal, data)
-
-    def execute_trade(self, signal, data):
+    def execute_trade(self, signal, data, size):
         self.enter_position(signal, data)
         if signal == 1:
             # TODO: add fees
-            trade = Trade(id=len(self.trades)+1, pair=self.config['pair'], time=data.iloc[-1]['timestamp'], price=data.iloc[-1]['close'], fees=0)
-            self.trades.append(trade)
+            trade = Trade(id=len(self.trades)+1, 
+                          pair=self.config['pair'], 
+                          time=data.iloc[-1]['timestamp'], 
+                          size=size, 
+                          price=data.iloc[-1]['close'],
+                          fees=0,
+                          side='buy')
+            self.balance -= trade.size * trade.price
         elif signal == -1:
-            pass
+            trade = Trade(id=len(self.trades)+1, 
+                          pair=self.config['pair'], 
+                          time=data.iloc[-1]['timestamp'], 
+                          size=size, 
+                          price=data.iloc[-1]['close'],
+                          fees=0,
+                          side='sell')
+            self.balance += trade.size * trade.price
 
-
-
-    
-
-    def record_trade(self):
-        pass
+        self.trades.append(trade)
 
     def save_trade(self, trade: Trade, filename: str):
-        pass
+        # Convert trade to dict for DataFrame
+        trade_dict = {
+            'id': trade.id,
+            'pair': trade.pair,
+            'time': trade.time,
+            'size': trade.size,
+            'price': trade.price,
+            'fees': trade.fees,
+            'side': trade.side
+        }
+        
+        # Create DataFrame from trade (square brackets becasuse input expects a list of dictionaries)
+        trade_df = pd.DataFrame([trade_dict])
+        
+        # If file doesn't exist, create it with headers
+        if not os.path.exists(filename):
+            trade_df.to_csv(filename, index=False)
+        else:
+            # Append without headers if file exists
+            trade_df.to_csv(filename, mode='a', header=False, index=False)
     
     
 

@@ -14,7 +14,8 @@
         "rsi_exitlong": 50,
         "bollinger_period": 20,
         "bollinger_std_dev": 2,
-        "atr_period": 14
+        "atr_period": 14,
+        "sma_period": 14
     },
 
     "risk_management": {

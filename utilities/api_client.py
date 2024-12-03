@@ -1,6 +1,6 @@
 import ccxt
 import pandas as pd
-from strategies.mean_reversion import MeanReversionStrat
+# from strategies.mean_reversion import MeanReversionStrat
 
 class APIClient:
     def __init__(self, config, api_key, api_secret):
