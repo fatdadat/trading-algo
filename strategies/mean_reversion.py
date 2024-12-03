@@ -9,9 +9,11 @@ class Trade:
     id: int
     pair: str
     time: datetime
+    size: float
     price: float
-    # pnl: float
     fees: float
+    side: str  # 'long' or 'short'
+
 
 # Use OHLCV dataframe from ccxt as data input and JSON config file as input in live build
 # Figure out position sizing later
@@ -31,6 +33,7 @@ class MeanReversionStrat:
         rsi_overbought = self.config['strategy']['rsi_overbought']
         rsi_exitlong = self.config['strategy']['rsi_exitlong']
         rsi_exitsell = self.config['strategy']['rsi_exitsell']
+        sma = sma(data, period=self.config['strategy']['sma_period'])
 
         # close price of current day is current trading price
         cur_price = data.iloc[-1]['close']
@@ -47,10 +50,10 @@ class MeanReversionStrat:
         # TODO: change from 2nd bb to middle bb
         elif self.pos != 0: #Check for exit signal
             long_sl_hit = cur_price >= self.trades[-1].price + self.sl_dist(signal=1, data=data)
-            exit_long = (cur_price <= bb_middle or rsi >= rsi_exitlong or long_sl_hit)
+            exit_long = (cur_price <= sma or rsi >= rsi_exitlong or long_sl_hit)
 
             short_sl_hit = cur_price <= self.trades[-1].price - self.sl_dist(signal=-1, data=data)
-            exit_short = (cur_price >= bb_middle or rsi <= rsi_exitsell or short_sl_hit)
+            exit_short = (cur_price >= sma or rsi <= rsi_exitsell or short_sl_hit)
             
 
             if self.pos == 1 and (exit_long):
