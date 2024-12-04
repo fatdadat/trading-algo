@@ -2,6 +2,7 @@
     "trading": {
         "exchange": "binance",
         "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"],
+        "pair": "BTC/AUD",
         "timeframe": "1d",
         "period": 100
     },

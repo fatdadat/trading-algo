@@ -5,6 +5,9 @@ from .indicators import rsi, bb, atr, std_dev
 from utilities.api_client import APIClient
 import os
 
+MAKER_FEE = 0.001
+TAKER_FEE = 0.001
+
 @dataclass
 # Should i make it a trade that has closed? idk
 class Trade:
@@ -16,6 +19,27 @@ class Trade:
     fees: float
     side: str  # 'long' or 'short'
 
+# class TradingEnvironment:
+#     def get_current_price(self, pair: str):
+#         raise NotImplementedError("Subclasses must implement this method")
+    
+#     def get_balance(self):
+#         raise NotImplementedError("Subclasses must implement this method")
+    
+#     def execute_trade(self, trade: Trade):
+#         raise NotImplementedError("Subclasses must implement this method")
+    
+#     def update_balance(self, amount: float):
+#         raise NotImplementedError("Subclasses must implement this method")
+    
+# class LiveTradingEnvironment(TradingEnvironment):
+#     def __init__(self, client: APIClient):
+#         self.client = client
+
+#     def get_current_price(self, pair: str):
+
+
+# class BacktestingEnvironment(TradingEnvironment):
 
 # Use OHLCV dataframe from ccxt as data input and JSON config file as input in live build
 # Figure out position sizing later
@@ -101,24 +125,27 @@ class MeanReversionStrat:
     def execute_trade(self, signal, data, size):
         self.enter_position(signal, data)
         if signal == 1:
-            # TODO: add fees
+            trade_price = data.iloc[-1]['close']
+            fees = trade_price * size * TAKER_FEE
             trade = Trade(id=len(self.trades)+1, 
                           pair=self.config['pair'], 
                           time=data.iloc[-1]['timestamp'], 
                           size=size, 
-                          price=data.iloc[-1]['close'],
-                          fees=0,
+                          price=trade_price,
+                          fees=fees,
                           side='buy')
-            self.balance -= trade.size * trade.price
+            self.balance -= (trade.size * trade.price + fees)
         elif signal == -1:
+            trade_price = data.iloc[-1]['close']
+            fees = trade_price * size * TAKER_FEE
             trade = Trade(id=len(self.trades)+1, 
                           pair=self.config['pair'], 
                           time=data.iloc[-1]['timestamp'], 
                           size=size, 
-                          price=data.iloc[-1]['close'],
-                          fees=0,
+                          price=trade_price,
+                          fees=fees,
                           side='sell')
-            self.balance += trade.size * trade.price
+            self.balance += (trade.size * trade.price - fees)
 
         self.trades.append(trade)
 
@@ -143,6 +170,3 @@ class MeanReversionStrat:
         else:
             # Append without headers if file exists
             trade_df.to_csv(filename, mode='a', header=False, index=False)
-    
-    
-

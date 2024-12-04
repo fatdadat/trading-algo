@@ -23,6 +23,8 @@ print(client.exchange.fetch_balance()['BTC']['free'])
 print("\nFREE AUD BALANCE:", client.exchange.fetch_balance()['AUD']['free'])
 # strategy = MeanReversionStrat(config=config, balance=client.exchange.fetch_balance()['BTC']['free'])
 
+
+
 data = client.fetch_ohlcv_df('BTC/USDT')
 print(data)
 
@@ -36,4 +38,7 @@ print(std_dev(data, 14))
 print(atr(data, 14))
 
 print('entry from middle',upper-middle)
-print('sl from middle', strategy.sl_dist(signal = 1, data = data))
+# print('sl from middle', strategy.sl_dist(signal = 1, data = data))
+
+print('bid',client.fetch_bid('BTC/USDT'))
+print('ask',client.fetch_ask('BTC/USDT'))

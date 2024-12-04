@@ -30,6 +30,22 @@ class APIClient:
             print(f"Error fetching data for {symbol}: {e}")
             return None
         
+    def fetch_ask(self, symbol):
+        try:
+            return self.exchange.fetch_order_book(symbol)['asks'][0][0]
+        except Exception as e:
+            print(f"Error fetching ask for {symbol}: {e}")
+            return None
+        
+    def fetch_bid(self, symbol):
+        try:
+            return self.exchange.fetch_order_book(symbol)['bids'][0][0]
+        except Exception as e:
+            print(f"Error fetching bid for {symbol}: {e}")
+            return None
+        
+
+        
     # def create_order(self, symbol, side, amount):
     #     try:
     #         order = self.exchange.create_order(symbol=symbol, type='market', side=side, amount=amount)
