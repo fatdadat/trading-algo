@@ -32,14 +32,14 @@ class APIClient:
         
     def fetch_ask(self, symbol):
         try:
-            return self.exchange.fetch_order_book(symbol)['asks'][0][0]
+            return self.exchange.fetch_ticker(symbol)['ask']
         except Exception as e:
             print(f"Error fetching ask for {symbol}: {e}")
             return None
         
     def fetch_bid(self, symbol):
         try:
-            return self.exchange.fetch_order_book(symbol)['bids'][0][0]
+            return self.exchange.fetch_ticker(symbol)['bid']
         except Exception as e:
             print(f"Error fetching bid for {symbol}: {e}")
             return None

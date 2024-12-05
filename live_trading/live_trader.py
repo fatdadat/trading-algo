@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
+# sys.path.append('..')
+
 import json
 from utilities.api_client import APIClient
 from keys import API_KEY, API_SECRET
