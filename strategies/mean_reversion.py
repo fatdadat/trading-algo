@@ -35,6 +35,9 @@ class TradingEnvironment:
     def get_balance(self):
         raise NotImplementedError("Subclasses must implement this method")
     
+    def get_equity(self, pair: str='BTC/USDT', position: str='flat', pos_size: float=0):
+        raise NotImplementedError("Subclasses must implement this method")
+    
     def update_balance(self, amount: float):
         raise NotImplementedError("Subclasses must implement this method")
     
@@ -62,7 +65,13 @@ class LiveTradingEnvironment(TradingEnvironment):
         return self.client.fetch_ohlcv_df(pair)
     
     def get_balance(self):
-        return self.client.exchange.fetch_balance()['AUD']['free']
+        return self.client.exchange.fetch_balance()['USDT']['free']
+    
+    def get_equity(self, pair: str='BTC/USDT', position: str='flat', pos_size: float=0):
+        # convert base to quote, figure out better way to get price value
+        # can be a negative value for margin trading
+        pair_quote_bal = self.client.exchange.fetch_balance()[pair]['total']*self.get_current_bid(pair)
+        return self.client.exchange.fetch_balance()['USDT']['free'] + pair_quote_bal
     
     def update_balance(self, amount: float):
         pass
@@ -103,6 +112,15 @@ class BacktestingEnvironment(TradingEnvironment):
     
     def get_balance(self):
         return self.balance
+    
+    def get_equity(self, pair: str='BTC/USDT', position: str='flat', pos_size: float=0):
+        if position == 'long':
+            return self.balance + self.current_data.iloc[-1]['close']*pos_size
+        elif position == 'short':
+            # have to buy back to convert to USDT
+            return self.balance - self.current_data.iloc[-1]['close']*pos_size
+        else:
+            return self.balance
     
     def update_balance(self, amount: float):
         self.balance += amount
@@ -190,13 +208,13 @@ class MeanReversionStrat:
         # No signal
         return 'flat'
     
-    def sl_dist(self, signal, data):
+    def sl_dist(self, signal):
         # TODO: change ATR multiplier later
         # Decide on volatility or ATR for sl distance measurement 
         atr_period = self.config['strategy']['atr_period']
         stop_loss_pct = self.config['risk_management']['stop_loss_pct']
         if signal == 'buy':
-            dist = atr(data, period=atr_period)*stop_loss_pct*2
+            dist = atr(self.env.get_current_data(), period=atr_period)*stop_loss_pct*2
 
             # Std_dev to measure distance
             # dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
@@ -205,7 +223,7 @@ class MeanReversionStrat:
             # dist = 0.4*data.iloc[-1]['close']
         elif signal == 'sell':
             # lower multiplier for short (higher upside risk)
-            dist = atr(data, period=atr_period)*stop_loss_pct*1.5
+            dist = atr(self.env.get_current_data(), period=atr_period)*stop_loss_pct*1.5
 
             # Std_dev to measure distance
             # dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
@@ -217,16 +235,17 @@ class MeanReversionStrat:
 
 
     # TODO: include fees, and also price probably isn't correct with last close price (gotta cross bid-ask spread)
-    def enter_position(self, signal, data):
+    def enter_position(self, signal):
         if signal == 'buy':
             self.pos = 'long'
         elif signal == 'sell':
             self.pos = 'short'
 
-        self.pos_size = self.config['risk_management']['portfolio_risk']*self.balance/self.sl_dist(signal, data)
-        self.execute_trade(signal, data, self.pos_size)
+        self.pos_size = self.config['risk_management']['portfolio_risk']*self.env.get_balance()/self.sl_dist(signal)
+        trade = self.execute_trade(signal, self.pos_size)
+        return trade
 
-    def execute_trade(self, signal, data, size):
+    def execute_trade(self, signal, size):
         trade_price, fees, time = self.env.execute_trade(self.config['pair'], signal, size)        
         trade = Trade(id=len(self.trades)+1,
                      pair=self.config['pair'],
@@ -244,6 +263,7 @@ class MeanReversionStrat:
         self.env.update_period()
 
         self.trades.append(trade)
+        return trade
 
     def save_trade(self, trade: Trade, filename: str):
         # Convert trade to dict for DataFrame
@@ -257,12 +277,12 @@ class MeanReversionStrat:
             'side': trade.side
         }
         
-        # Create DataFrame from trade (square brackets becasuse input expects a list of dictionaries)
+        # Create DataFrame from trade (square brackets because input expects a list of dictionaries)
         trade_df = pd.DataFrame([trade_dict])
         
-        # If file doesn't exist, create it with headers
-        if not os.path.exists(filename):
+        # If file doesn't exist or is empty, create it with headers
+        if not os.path.exists(filename) or os.path.getsize(filename) == 0:
             trade_df.to_csv(filename, index=False)
         else:
-            # Append without headers if file exists
+            # Append without headers if file exists and has content
             trade_df.to_csv(filename, mode='a', header=False, index=False)

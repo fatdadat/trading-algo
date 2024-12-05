@@ -20,12 +20,13 @@ with open('config.json', 'r') as f:
     config = json.load(f)
 
 client = APIClient(config, API_KEY, API_SECRET)
-print(client.exchange.fetch_ticker('BTC/USDT'))
+client.exchange.enableRateLimit = True
+client.exchange.options['adjustForTimeDifference'] = True
+
+print(client.exchange.fetch_ticker('AUD/USDT'))
 print(client.exchange.fetch_balance()['BTC']['free'])
 print("\nFREE AUD BALANCE:", client.exchange.fetch_balance()['AUD']['free'])
 # strategy = MeanReversionStrat(config=config, balance=client.exchange.fetch_balance()['BTC']['free'])
-
-
 
 data = client.fetch_ohlcv_df('BTC/USDT')
 print(data)
