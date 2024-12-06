@@ -1,7 +1,7 @@
 import pandas as pd
 from dataclasses import dataclass
 from datetime import datetime
-from .indicators import rsi, bb, atr, std_dev
+from .indicators import rsi, bb, atr, std_dev, sma
 from utilities.api_client import APIClient
 import os
 
@@ -140,13 +140,14 @@ class BacktestingEnvironment(TradingEnvironment):
         return trade_price, fees, time
 
     def update_period(self):
-        self.cur_period += 1
-        self.current_data = self.data.iloc[self.cur_period:self.cur_period+self.period_length]
-
         if self.cur_period + self.period_length > len(self.data):
             self.current_data = None
-            raise ValueError("No more data to update period")
- 
+            # raise ValueError("No more data to update period")
+        else:
+            self.cur_period += 1
+            self.current_data = self.data.iloc[self.cur_period:self.cur_period+self.period_length]
+
+    
 
 # Use OHLCV dataframe from ccxt as data input and JSON config file as input in live build
 class MeanReversionStrat:
@@ -173,48 +174,60 @@ class MeanReversionStrat:
 
     # For both entry and exit signals, could combine into seperate functions in future
     def gen_signal(self):
-        rsi = rsi(self.env.get_current_data(), period=self.config['strategy']['rsi_period'])
-        bb_upper, bb_middle, bb_lower = bb(self.env.get_current_data(), period=self.config['bb_period'], std_dev=self.config['bb_std_dev'])
+        data = self.env.get_current_data()  
+        rsi_val = rsi(data, period=self.config['strategy']['rsi_period'])
+        bb_upper, bb_middle, bb_lower = bb(data, period=self.config['strategy']['bollinger_period'], num_devs=self.config['strategy']['bollinger_std_dev'])
         rsi_oversold = self.config['strategy']['rsi_oversold']
         rsi_overbought = self.config['strategy']['rsi_overbought']
         rsi_exitlong = self.config['strategy']['rsi_exitlong']
         rsi_exitsell = self.config['strategy']['rsi_exitsell']
-        sma = sma(self.env.get_current_data(), period=self.config['strategy']['sma_period'])
+        sma_val = sma(data, period=self.config['strategy']['sma_period'])
 
         # close price of current day is current trading price
-        cur_price = self.env.get_current_data().iloc[-1]['close']
+        cur_price = data.iloc[-1]['close']
+
+        print('current time', self.env.get_current_time())
+        print('current period', self.env.cur_period)
 
         if self.pos == 'flat': #Check for entry signal
-            enter_long = rsi <= rsi_oversold and cur_price < bb_lower
-            enter_short = rsi >= rsi_overbought and cur_price > bb_upper
+            enter_long = rsi_val <= rsi_oversold and cur_price < bb_lower
+            enter_short = rsi_val >= rsi_overbought and cur_price > bb_upper
             # Buy signal
             if enter_long:
+                print('enter long')
                 return 'buy'
             # Sell signal
             elif enter_short:
+                print('enter short')
                 return 'sell'
 
-        elif self.pos != 'flat': #Check for exit signal
-            long_sl_hit = cur_price >= self.trades[-1].price + self.sl_dist(signal='buy', data=data)
-            exit_long = (cur_price <= sma or rsi >= rsi_exitlong or long_sl_hit)
+        elif self.pos == 'long': # Check for long exit signal
+            long_sl_hit = cur_price >= self.trades[-1].price + self.sl_dist(signal='buy')
+            exit_long = (cur_price <= sma_val or rsi_val >= rsi_exitlong or long_sl_hit)
 
-            short_sl_hit = cur_price <= self.trades[-1].price - self.sl_dist(signal='sell', data=data)
-            exit_short = (cur_price >= sma or rsi <= rsi_exitsell or short_sl_hit)
-
-            if self.pos == 'long' and (exit_long):
+            if exit_long:
+                print('exit long')
                 return 'sell'
-            elif self.pos == 'short' and (exit_short):
+
+        elif self.pos == 'short': # Check for short exit signal
+            short_sl_hit = cur_price <= self.trades[-1].price - self.sl_dist(signal='sell')
+            exit_short = (cur_price >= sma_val or rsi_val <= rsi_exitsell or short_sl_hit)
+
+            if exit_short:
+                print('exit short')
                 return 'buy'
         # No signal
+        print('no signal')
         return 'flat'
     
     def sl_dist(self, signal):
+        data = self.env.get_current_data()
         # TODO: change ATR multiplier later
         # Decide on volatility or ATR for sl distance measurement 
         atr_period = self.config['strategy']['atr_period']
         stop_loss_pct = self.config['risk_management']['stop_loss_pct']
         if signal == 'buy':
-            dist = atr(self.env.get_current_data(), period=atr_period)*stop_loss_pct*2
+            dist = atr(data, period=atr_period)*stop_loss_pct*2
 
             # Std_dev to measure distance
             # dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
@@ -223,7 +236,7 @@ class MeanReversionStrat:
             # dist = 0.4*data.iloc[-1]['close']
         elif signal == 'sell':
             # lower multiplier for short (higher upside risk)
-            dist = atr(self.env.get_current_data(), period=atr_period)*stop_loss_pct*1.5
+            dist = atr(data, period=atr_period)*stop_loss_pct*1.5
 
             # Std_dev to measure distance
             # dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
@@ -246,9 +259,10 @@ class MeanReversionStrat:
         return trade
 
     def execute_trade(self, signal, size):
-        trade_price, fees, time = self.env.execute_trade(self.config['pair'], signal, size)        
+        pair = self.config['trading']['pair']
+        trade_price, fees, time = self.env.execute_trade(pair, signal, size)        
         trade = Trade(id=len(self.trades)+1,
-                     pair=self.config['pair'],
+                     pair=pair,
                      time=time,
                      size=size,
                      price=trade_price,
@@ -260,7 +274,6 @@ class MeanReversionStrat:
 
         # just for backtesting envrionment
         self.env.update_balance(multiplier * (trade.size * trade.price) - fees)
-        self.env.update_period()
 
         self.trades.append(trade)
         return trade

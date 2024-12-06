@@ -11,14 +11,15 @@ class APIClient:
             'enableRateLimit': True
         }) 
         self.config = config
+        self.period = config['trading']['period']
         # self.strategy = MeanReversionStrat(config, )
 
-    def fetch_ohlcv_df(self, symbol):
+    def fetch_ohlcv_df(self, symbol, period):
         #time of each candlestick
         timeframe = self.config['trading']['timeframe']
 
         #number of candlesticks
-        period = self.config['trading']['period']
+        # period = self.config['trading']['period']
 
         try:
             data = self.exchange.fetch_ohlcv(symbol, timeframe, limit=period)
