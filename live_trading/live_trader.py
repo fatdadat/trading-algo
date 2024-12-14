@@ -28,7 +28,7 @@ print(client.exchange.fetch_balance()['BTC']['free'])
 print("\nFREE AUD BALANCE:", client.exchange.fetch_balance()['AUD']['free'])
 # strategy = MeanReversionStrat(config=config, balance=client.exchange.fetch_balance()['BTC']['free'])
 
-data = client.fetch_ohlcv_df('BTC/USDT')
+data = client.fetch_ohlcv_df('BTC/USDT', 100)
 print(data)
 
 rsi(data, 14)

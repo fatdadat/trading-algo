@@ -18,6 +18,7 @@ class Trade:
     price: float #BTC/AUD trade price
     fees: float
     side: str  # 'long' or 'short'
+    pnl: float
 
 class TradingEnvironment:
     def get_current_ask(self, pair: str):
@@ -227,50 +228,80 @@ class MeanReversionStrat:
         atr_period = self.config['strategy']['atr_period']
         stop_loss_pct = self.config['risk_management']['stop_loss_pct']
         if signal == 'buy':
-            dist = atr(data, period=atr_period)*stop_loss_pct*2
+            atr_dist = atr(data, period=atr_period)*2
 
             # Std_dev to measure distance
-            # dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
+            std_dev_dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
 
             # Exit when lost 40% of position size
-            # dist = 0.4*data.iloc[-1]['close']
+            pos_dist = 0.4*data.iloc[-1]['close']
         elif signal == 'sell':
             # lower multiplier for short (higher upside risk)
-            dist = atr(data, period=atr_period)*stop_loss_pct*1.5
+            atr_dist = atr(data, period=atr_period)*1.5
 
             # Std_dev to measure distance
-            # dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
+            std_dev_dist = std_dev(data, period=self.config['strategy']['bollinger_period'])
 
             # Exit when lost 40% of position size
-            # dist = 0.4*data.iloc[-1]['close']
-
+            pos_dist = 0.4*data.iloc[-1]['close']
+        print(f"ATR Distance: {atr_dist}")
+        print(f"Std Dev Distance: {std_dev_dist}")
+        print(f"Position Distance: {pos_dist}")
+        dist = pos_dist
         return dist
 
 
     # TODO: include fees, and also price probably isn't correct with last close price (gotta cross bid-ask spread)
     def enter_position(self, signal):
         if signal == 'buy':
-            self.pos = 'long'
-        elif signal == 'sell':
-            self.pos = 'short'
+            if self.pos == 'flat':
+                self.pos = 'long'
+            elif self.pos == 'short':
+                self.pos = 'flat'
 
+        elif signal == 'sell':
+            if self.pos == 'flat':
+                self.pos = 'short'
+            elif self.pos == 'long':
+                self.pos = 'flat'
+
+        # In BTC
         self.pos_size = self.config['risk_management']['portfolio_risk']*self.env.get_balance()/self.sl_dist(signal)
         trade = self.execute_trade(signal, self.pos_size)
         return trade
 
     def execute_trade(self, signal, size):
         pair = self.config['trading']['pair']
-        trade_price, fees, time = self.env.execute_trade(pair, signal, size)        
+        trade_price, fees, time = self.env.execute_trade(pair, signal, size)      
+
+        # Calculate PnL if closing a position
+        if signal == 'sell' and self.pos == 'long':
+            pnl = (trade_price - self.trades[-1].price) * size - fees
+        elif signal == 'buy' and self.pos == 'short':
+            pnl = (self.trades[-1].price - trade_price) * size - fees
+        else:
+            pnl = 0
+
         trade = Trade(id=len(self.trades)+1,
                      pair=pair,
                      time=time,
                      size=size,
                      price=trade_price,
                      fees=fees,
-                     side=signal)
+                     side=signal,
+                     pnl = pnl)
         
         # Update balance (negative for buy, positive for sell)
         multiplier = -1 if signal == 'buy' else 1
+
+        # Calculate PnL, assuming position has already been updated in enter_position
+        # If now flat, then current trade has closed position
+        if self.pos == 'flat':
+            pnl = multiplier * (trade_price - self.trades[-1].price) * size - fees
+        else:
+            pnl = 0
+
+        trade.pnl = pnl
 
         # just for backtesting envrionment
         self.env.update_balance(multiplier * (trade.size * trade.price) - fees)
@@ -287,7 +318,8 @@ class MeanReversionStrat:
             'size': trade.size,
             'price': trade.price,
             'fees': trade.fees,
-            'side': trade.side
+            'side': trade.side,
+            'pnl': trade.pnl
         }
         
         # Create DataFrame from trade (square brackets because input expects a list of dictionaries)
@@ -299,3 +331,5 @@ class MeanReversionStrat:
         else:
             # Append without headers if file exists and has content
             trade_df.to_csv(filename, mode='a', header=False, index=False)
+
+    
